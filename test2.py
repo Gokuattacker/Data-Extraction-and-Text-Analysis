@@ -1,51 +1,42 @@
-import pandas as pd
-import requests
+import openpyxl
 from bs4 import BeautifulSoup
-import os
+import requests
+import re
 
-def extract_article(url):
+def extract_article_text(url):
     try:
         response = requests.get(url)
-        response.raise_for_status()
-
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        title = soup.title.text.strip()
+        title = soup.find('title').get_text(strip=True) if soup.find('title') else "No Title"
 
-        article_content = soup.find('div', class_='article-content')  
-
-        article_text = ""
-        if article_content:
-            for paragraph in article_content.find_all('p'):
-                article_text += paragraph.text + "\n"
+        article_text = ''
+        article_tags = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section'])
+        for tag in article_tags:
+            article_text += tag.get_text(strip=True) + '\n'
 
         return title, article_text
+
     except Exception as e:
-        print(f"Error extracting article from {url}: {e}")
+        print(f"Error extracting text from {url}: {e}")
         return None, None
 
-def process_excel(input_file, output_folder):
-    
-    df = pd.read_excel(input_file, sheet_name='input')
-
-    os.makedirs(output_folder, exist_ok=True)
-
-    for index, row in df.iterrows():
-        url = row['B']
-
-        title, article_text = extract_article(url)
-
-        output_file_path = os.path.join(output_folder, f"{index + 1}_{title}.txt")
-        with open(output_file_path, 'w', encoding='utf-8') as output_file:
-            output_file.write(f"Title: {title}\n\n")
-            output_file.write("Article Text:\n")
-            output_file.write(article_text)
-
-    print(f"Extracted data saved to {output_folder}")
+def save_to_text_file(url_id, title, article_text):
+    filename = f"{url_id}.txt"
+    with open(filename, 'w', encoding='utf-8') as file:
+        file.write(f"{title}\n\n{article_text}")
 
 if __name__ == "__main__":
-    input_file_path = 'D:\Blackcoffer\Input.xlsx'
+    
+    excel_file = 'Input.xlsx'
+    wb = openpyxl.load_workbook(excel_file)
+    sheet = wb.active
 
-    output_folder_path = 'D:\Blackcoffer'
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        url_id, url = row
+        title, article_text = extract_article_text(url)
 
-    process_excel(input_file_path, output_folder_path)
+        if title is not None and article_text is not None:
+            save_to_text_file(url_id, title, article_text)
+
+    print("Extraction and saving completed.")
